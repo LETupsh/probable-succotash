@@ -9,7 +9,7 @@ import datetime
 from streamlit_cookies_manager import EncryptedCookieManager # 新增
 import os
 
-# --- 用户数据库 (未来可以轻松添加更多) ---
+# --- 用户数据库  ---
 USER_CREDENTIALS = {
     "msj01": "888888"
 }
