@@ -95,24 +95,25 @@ def calculate_single_case(
     peak_valley_map: dict,
     prices: dict,
     month_8760_array: np.ndarray,
-    discharge_allowed: dict
+    discharge_allowed: dict,
+    return_hourly: bool = False      # <--- 新增参数
 ) -> dict:
     # 基础发电数据计算
-    pv_generation = pv_unit_data * pv_capacity_1mw           # pv_unit_data: kWh/MW, 结果单位: kWh
-    wind_generation = wind_unit_data * wind_capacity_1mw     # 同上
+    pv_generation = pv_unit_data * pv_capacity_1mw
+    wind_generation = wind_unit_data * wind_capacity_1mw
     generation_data = pv_generation + wind_generation
 
     # 储能参数初始化
     storage_capacity_max_kwh = storage_power_mw * storage_duration_h * 1000
     max_charge_power_kwh = storage_power_mw * 1000
     max_discharge_power_kwh = storage_power_mw * 1000
-    
+
     storage_efficiency_single = math.sqrt(storage_efficiency_p3)
     storage_capacity_arr = np.zeros(8760)
 
-    total_consumption_sum = 0.0 
-    total_on_grid_sum = 0.0 
-    total_charge_loss = 0.0 
+    total_consumption_sum = 0.0
+    total_on_grid_sum = 0.0
+    total_charge_loss = 0.0
     total_discharge_loss = 0.0
     total_discharge_energy = 0.0
 
@@ -123,33 +124,51 @@ def calculate_single_case(
         '谷': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0},
         '深': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0}
     }
-    
+
+    # --- 新增：逐时过程量数组 ---
+    if return_hourly:
+        hourly_pv_gen = np.zeros(8760)
+        hourly_wind_gen = np.zeros(8760)
+        hourly_generation = np.zeros(8760)
+        hourly_load = np.zeros(8760)
+        hourly_charge_in = np.zeros(8760)        # 充入储能的能量（已计效率）
+        hourly_charge_source = np.zeros(8760)     # 充电来源（计效率前）
+        hourly_discharge_req = np.zeros(8760)     # 储能放电需求量（计效率前）
+        hourly_discharge_out = np.zeros(8760)    # 储能放电输出（计效率后）
+        hourly_soc = np.zeros(8760)              # 储能当前容量
+        hourly_consumption = np.zeros(8760)      # 消纳量
+        hourly_on_grid = np.zeros(8760)          # 上网量
+        hourly_period = ['平'] * 8760            # 时段类型
+        hourly_charge_loss = np.zeros(8760)      # 充电损失
+        hourly_discharge_loss = np.zeros(8760)   # 放电损失
+
     for i in range(8760):
         current_generation = generation_data[i]
         current_load = load_data[i]
         previous_storage_capacity = storage_capacity_arr[i - 1] if i > 0 else 0.0
-        
-        hour_of_day = i % 24
-        month = month_8760_array[i] 
-        current_period_type = peak_valley_map.get(f"{hour_of_day}_{month}", '平') 
 
-        # 充电逻辑 (发电 > 负载时)
+        hour_of_day = i % 24
+        month = month_8760_array[i]
+        current_period_type = peak_valley_map.get(f"{hour_of_day}_{month}", '平')
+
+        # 充电逻辑
         storage_charge_in_i = 0.0
+        storage_charge_source = 0.0
         on_grid_i = 0.0
         if current_generation > current_load:
             available_from_generation = current_generation - current_load
             remaining_storage_capacity = storage_capacity_max_kwh - previous_storage_capacity
             charge_effective = available_from_generation * storage_efficiency_single
-            max_storage_charge = max_charge_power_kwh * storage_efficiency_single  # 关键修正
-            storage_charge_in_i = min(charge_effective, remaining_storage_capacity, max_storage_charge)
+            max_storage_charge = max_charge_power_kwh * storage_efficiency_single
+            storage_charge_in_i = min(charge_effective, remaining_storage_capacity, max_storage_charge / storage_efficiency_single)
             storage_charge_in_i = max(0, storage_charge_in_i)
             storage_charge_source = storage_charge_in_i / storage_efficiency_single
             total_charge_loss += (storage_charge_source - storage_charge_in_i)
             on_grid_i = max(0, available_from_generation - storage_charge_source)
 
-        # 放电逻辑 (负载 > 发电 且 处于允许放电时段)
+        # 放电逻辑
         storage_required_discharge_i = 0.0
-        storage_discharge_out_i = 0.0 
+        storage_discharge_out_i = 0.0
         if current_load > current_generation and discharge_allowed.get(current_period_type, False):
             load_gap = current_load - current_generation
             min_storage_capacity = storage_capacity_max_kwh * (1 - discharge_depth_p2)
@@ -163,14 +182,31 @@ def calculate_single_case(
 
         storage_capacity_i = previous_storage_capacity + storage_charge_in_i - storage_required_discharge_i
         storage_capacity_arr[i] = max(0, min(storage_capacity_i, storage_capacity_max_kwh))
-        
+
         total_available = current_generation + storage_discharge_out_i
-        consumption_i = min(total_available, current_load) 
+        consumption_i = min(total_available, current_load)
         total_consumption_sum += consumption_i
 
         if current_generation <= current_load and total_available > current_load:
-             on_grid_i += (total_available - current_load)
+            on_grid_i += (total_available - current_load)
         total_on_grid_sum += on_grid_i
+
+        # --- 新增：记录逐时过程量 ---
+        if return_hourly:
+            hourly_pv_gen[i] = pv_generation[i]
+            hourly_wind_gen[i] = wind_generation[i]
+            hourly_generation[i] = current_generation
+            hourly_load[i] = current_load
+            hourly_charge_in[i] = storage_charge_in_i
+            hourly_charge_source[i] = storage_charge_source
+            hourly_discharge_req[i] = storage_required_discharge_i
+            hourly_discharge_out[i] = storage_discharge_out_i
+            hourly_soc[i] = storage_capacity_arr[i]
+            hourly_consumption[i] = consumption_i
+            hourly_on_grid[i] = on_grid_i
+            hourly_period[i] = current_period_type
+            hourly_charge_loss[i] = storage_charge_source - storage_charge_in_i
+            hourly_discharge_loss[i] = storage_required_discharge_i - storage_discharge_out_i
 
         if current_period_type in time_period_stats:
             stats = time_period_stats[current_period_type]
@@ -179,24 +215,25 @@ def calculate_single_case(
             stats['consumption_cost_sum'] += consumption_i * prices[current_period_type]['self']
             stats['on_grid_cost_sum'] += on_grid_i * prices[current_period_type]['on_grid']
 
+    # ... 原有的汇总计算保持不变 ...
     total_pv_gen = np.sum(pv_generation)
     total_wind_gen = np.sum(wind_generation)
     total_curtailment_sum = total_charge_loss + total_discharge_loss + storage_capacity_arr[-1]
     total_generation_sum = total_pv_gen + total_wind_gen
-    
+
     total_consumption_cost = sum(s['consumption_cost_sum'] for s in time_period_stats.values())
     total_on_grid_cost = sum(s['on_grid_cost_sum'] for s in time_period_stats.values())
-    
+
     weighted_self_price = total_consumption_cost / total_consumption_sum if total_consumption_sum > 0 else 0.0
     weighted_on_grid_price = total_on_grid_cost / total_on_grid_sum if total_on_grid_sum > 0 else 0.0
-    total_revenue = total_consumption_cost + total_on_grid_cost + (total_curtailment_sum * prices['Curtailment']) 
+    total_revenue = total_consumption_cost + total_on_grid_cost + (total_curtailment_sum * prices['Curtailment'])
     integrated_price = total_revenue / total_generation_sum if total_generation_sum > 0 else 0.0
-    equivalent_cycles = total_discharge_energy / storage_capacity_max_kwh if storage_capacity_max_kwh > 0 else 0.0  
+    equivalent_cycles = total_discharge_energy / storage_capacity_max_kwh if storage_capacity_max_kwh > 0 else 0.0
 
     pv_hours = total_pv_gen / (pv_capacity_1mw * 1000) if pv_capacity_1mw > 0 else 0.0
     wind_hours = total_wind_gen / (wind_capacity_1mw * 1000) if wind_capacity_1mw > 0 else 0.0
 
-    return {
+    result = {
         "total_generation_sum": total_generation_sum,
         "total_pv_generation": total_pv_gen,
         "total_wind_generation": total_wind_gen,
@@ -208,9 +245,34 @@ def calculate_single_case(
         "weighted_self_price": weighted_self_price,
         "weighted_on_grid_price": weighted_on_grid_price,
         "integrated_price": integrated_price,
-        "storage_equivalent_cycles": equivalent_cycles,  
+        "storage_equivalent_cycles": equivalent_cycles,
         "time_period_stats": time_period_stats
     }
+
+    # --- 新增：附加逐时数据 ---
+    if return_hourly:
+        result["hourly_data"] = {
+            "hour": np.arange(8760),
+            "month": month_8760_array,
+            "hour_of_day": np.arange(8760) % 24,
+            "period_type": hourly_period,
+            "pv_generation_kwh": hourly_pv_gen,
+            "wind_generation_kwh": hourly_wind_gen,
+            "total_generation_kwh": hourly_generation,
+            "load_kwh": hourly_load,
+            "charge_source_kwh": hourly_charge_source,
+            "charge_into_storage_kwh": hourly_charge_in,
+            "charge_loss_kwh": hourly_charge_loss,
+            "discharge_required_kwh": hourly_discharge_req,
+            "discharge_out_kwh": hourly_discharge_out,
+            "discharge_loss_kwh": hourly_discharge_loss,
+            "storage_soc_kwh": hourly_soc,
+            "consumption_kwh": hourly_consumption,
+            "on_grid_kwh": hourly_on_grid,
+        }
+
+    return result
+
 
 def perform_batch_calculation(pv_unit_data, wind_unit_data, load_data, params, month_8760_array):
     batch_results = []
@@ -314,6 +376,88 @@ def write_batch_results_to_excel(results: list[dict], params: dict) -> io.BytesI
     workbook.save(excel_stream)
     excel_stream.seek(0)
     return excel_stream
+
+def write_hourly_data_to_excel(hourly_data: dict, scheme_info: dict) -> io.BytesIO:
+    """将某个方案的 8760 逐时过程量导出为 Excel"""
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "8760逐时过程量"
+
+    # ========== 第 1 行：方案信息摘要 ==========
+    summary_headers = [
+        "光伏容量 (MW)", "风电容量 (MW)", "储能功率 (MW)", "储能时长 (h)",
+        "储能容量 (MWh)", "综合电价", "总发电量 (kWh)", "总消纳量 (kWh)",
+        "总上网量 (kWh)", "总折损量 (kWh)", "自用比例 (%)", "用电比例 (%)"
+    ]
+    for col_idx, header in enumerate(summary_headers, 1):
+        cell = sheet.cell(row=1, column=col_idx, value=header)
+        cell.font = Font(bold=True, size=10)
+        cell.alignment = Alignment(horizontal="center")
+
+    summary_values = [
+        scheme_info.get('光伏容量 (MW)', ''),
+        scheme_info.get('风电容量 (MW)', ''),
+        scheme_info.get('储能功率 (MW)', ''),
+        scheme_info.get('储能时长 (h)', ''),
+        scheme_info.get('储能容量 (MWh)', ''),
+        round(scheme_info.get('综合电价', 0), 4),
+        round(scheme_info.get('总发电量 (kWh)', 0), 2),
+        round(scheme_info.get('总消纳量 (kWh)', 0), 2),
+        round(scheme_info.get('总上网量 (kWh)', 0), 2),
+        round(scheme_info.get('总折损量 (kWh)', 0), 2),
+        round(scheme_info.get('自用比例 (%)', 0), 2),
+        round(scheme_info.get('用电比例 (%)', 0), 2),
+    ]
+    for col_idx, val in enumerate(summary_values, 1):
+        cell = sheet.cell(row=2, column=col_idx, value=val)
+        cell.alignment = Alignment(horizontal="center")
+
+    # ========== 第 4 行开始：8760 逐时数据表头 ==========
+    start_row = 4
+    hourly_headers = [
+        "小时序号", "月份", "日内小时", "时段类型",
+        "光伏发电 (kWh)", "风电发电 (kWh)", "总发电量 (kWh)",
+        "负载 (kWh)",
+        "充电来源 (kWh)", "充入储能 (kWh)", "充电损失 (kWh)",
+        "放电需求 (kWh)", "放电输出 (kWh)", "放电损失 (kWh)",
+        "储能SOC (kWh)", "消纳量 (kWh)", "上网量 (kWh)"
+    ]
+    for col_idx, header in enumerate(hourly_headers, 1):
+        cell = sheet.cell(row=start_row, column=col_idx, value=header)
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+        sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 18
+
+    # ========== 填充 8760 行数据 ==========
+    n = len(hourly_data["hour"])
+    for i in range(n):
+        row = start_row + 1 + i
+        sheet.cell(row=row, column=1, value=i + 1)
+        sheet.cell(row=row, column=2, value=int(hourly_data["month"][i]))
+        sheet.cell(row=row, column=3, value=int(hourly_data["hour_of_day"][i]))
+        sheet.cell(row=row, column=4, value=str(hourly_data["period_type"][i]))
+        sheet.cell(row=row, column=5, value=round(float(hourly_data["pv_generation_kwh"][i]), 4))
+        sheet.cell(row=row, column=6, value=round(float(hourly_data["wind_generation_kwh"][i]), 4))
+        sheet.cell(row=row, column=7, value=round(float(hourly_data["total_generation_kwh"][i]), 4))
+        sheet.cell(row=row, column=8, value=round(float(hourly_data["load_kwh"][i]), 4))
+        sheet.cell(row=row, column=9, value=round(float(hourly_data["charge_source_kwh"][i]), 4))
+        sheet.cell(row=row, column=10, value=round(float(hourly_data["charge_into_storage_kwh"][i]), 4))
+        sheet.cell(row=row, column=11, value=round(float(hourly_data["charge_loss_kwh"][i]), 4))
+        sheet.cell(row=row, column=12, value=round(float(hourly_data["discharge_required_kwh"][i]), 4))
+        sheet.cell(row=row, column=13, value=round(float(hourly_data["discharge_out_kwh"][i]), 4))
+        sheet.cell(row=row, column=14, value=round(float(hourly_data["discharge_loss_kwh"][i]), 4))
+        sheet.cell(row=row, column=15, value=round(float(hourly_data["storage_soc_kwh"][i]), 4))
+        sheet.cell(row=row, column=16, value=round(float(hourly_data["consumption_kwh"][i]), 4))
+        sheet.cell(row=row, column=17, value=round(float(hourly_data["on_grid_kwh"][i]), 4))
+
+    # 冻结表头
+    sheet.freeze_panes = f"A{start_row + 1}"
+
+    excel_stream = io.BytesIO()
+    workbook.save(excel_stream)
+    excel_stream.seek(0)
+    return excel_stream
+
 
 # --- 4. 辅助函数与 UI 组件 ---
 
@@ -448,7 +592,7 @@ def main():
             df_preview = pd.DataFrame(preview_data).set_index("小时")
             st.markdown("##### 图例：<span style='background-color:#ff6347; color:white; padding:2px 6px; border-radius:3px;'>尖</span> <span style='background-color:#ffd700; color:black; padding:2px 6px; border-radius:3px;'>峰</span> <span style='background-color:#90ee90; color:black; padding:2px 6px; border-radius:3px;'>平</span> <span style='background-color:#add8e6; color:black; padding:2px 6px; border-radius:3px;'>谷</span> <span style='background-color:#4682b4; color:white; padding:2px 6px; border-radius:3px;'>深</span>", unsafe_allow_html=True)
             # 使用 .map() 代替已弃用的 .applymap()
-            st.dataframe(df_preview.style.map(color_time_periods), use_container_width=True, height=800)
+            st.dataframe(df_preview.style.map(color_time_periods), width='stretch', height=800)
 
         # --- 全年日均逐时电价折线图 ---
         st.markdown("---")
@@ -492,7 +636,6 @@ def main():
         if f:
             df = pd.read_csv(f)
             
-            # 效率与放电深度依然保持数值输入，因为它们通常不作为批量变量
             c1, c2 = st.columns(2)
             eff = c1.number_input("储能往返效率 (P3)", value=0.85, max_value=1.0)
             dep = c2.number_input("储能放电深度 (P2)", value=0.9, max_value=1.0)
@@ -569,15 +712,71 @@ def main():
                     "谷消纳 (%)": "{:.2f}",
                     "深消纳 (%)": "{:.2f}", 
                     "储能等效循环次数": "{:.2f}"
-                }), use_container_width=True)
+                }), width='stretch')
                 
                 ex_data = write_batch_results_to_excel(st.session_state.batch_results, st.session_state.last_params)
-                st.download_button(
-                    label="下载 Excel 完整报表",
-                    data=ex_data,
-                    file_name=f"能源模拟分析_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                
+                # --- 导出按钮行：完整报表 + 逐时过程量 ---
+                col_dl1, col_dl2 = st.columns([1, 1])
+                with col_dl1:
+                    st.download_button(
+                        label="下载 Excel 完整报表",
+                        data=ex_data,
+                        file_name=f"能源模拟分析_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        width='stretch'
+                    )
+                with col_dl2:
+                    # 方案选择下拉框
+                    scheme_options = [
+                        f"方案{idx}：光伏{res['光伏容量 (MW)']}MW_风电{res['风电容量 (MW)']}MW_储能{res['储能功率 (MW)']}MWx{res['储能时长 (h)']}h"
+                        for idx, res in enumerate(st.session_state.batch_results, 1)
+                    ]
+                    selected_scheme_idx = st.selectbox(
+                        "选择方案导出逐时数据",
+                        range(len(scheme_options)),
+                        format_func=lambda i: scheme_options[i],
+                        key="scheme_selector"
+                    )
+                    
+                    if st.button("计算该方案 8760 逐时过程量", width='stretch', key="export_hourly"):
+                        with st.spinner("正在重新计算逐时数据并生成 Excel..."):
+                            selected = st.session_state.batch_results[selected_scheme_idx]
+                            # 重新获取原始数据
+                            pv_unit = df["PV_Unit_Output(kWh)"].values
+                            wind_unit = df["Wind_Unit_Output(kWh)"].values
+                            load = df["Load(kWh)"].values
+                            month_arr = generate_8760_month_array()
+                            
+                            # 重新计算该方案，并返回逐时数据
+                            hourly_res = calculate_single_case(
+                                pv_unit, wind_unit, load,
+                                selected['光伏容量 (MW)'],
+                                selected['风电容量 (MW)'],
+                                selected['储能功率 (MW)'],
+                                selected['储能时长 (h)'],
+                                st.session_state.last_params['efficiency'],
+                                st.session_state.last_params['depth'],
+                                st.session_state.last_params['peak_valley_map'],
+                                st.session_state.last_params['prices'],
+                                month_arr,
+                                st.session_state.last_params['discharge_allowed'],
+                                return_hourly=True          # <--- 关键：返回逐时数据
+                            )
+                            
+                            hourly_excel = write_hourly_data_to_excel(
+                                hourly_res["hourly_data"], selected
+                            )
+                        
+                        st.download_button(
+                            label="点击下载逐时过程量 Excel",
+                            data=hourly_excel,
+                            file_name=f"8760逐时过程量_方案{selected_scheme_idx+1}_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            width='stretch',
+                            key="download_hourly"
+                        )
+
 
 if __name__ == "__main__":
 # 配置必须放在最前面
