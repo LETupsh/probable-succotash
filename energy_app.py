@@ -42,7 +42,7 @@ def check_login():
             # 2. 检查账号是否存在且密码是否匹配
             if user_input in USER_CREDENTIALS and USER_CREDENTIALS[user_input] == pw_input:
                 cookies["auth_status"] = "logged_in"
-                cookies["current_user"] = user_input # 额外记录是哪个用户登录的
+                cookies["current_user"] = user_input 
                 cookies.save()
                 st.success(f"欢迎回来，{user_input}！正在进入系统...")
                 st.rerun()
@@ -118,11 +118,11 @@ def calculate_single_case(
     total_discharge_energy = 0.0
 
     time_period_stats = {
-        '尖': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0},
+        '尖峰': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0},
         '峰': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0},
         '平': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0},
         '谷': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0},
-        '深': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0}
+        '深谷': {'consumption': 0.0, 'on_grid': 0.0, 'consumption_cost_sum': 0.0, 'on_grid_cost_sum': 0.0}
     }
 
     # --- 新增：逐时过程量数组 ---
@@ -215,7 +215,7 @@ def calculate_single_case(
             stats['consumption_cost_sum'] += consumption_i * prices[current_period_type]['self']
             stats['on_grid_cost_sum'] += on_grid_i * prices[current_period_type]['on_grid']
 
-    # ... 原有的汇总计算保持不变 ...
+    # 汇总计算.
     total_pv_gen = np.sum(pv_generation)
     total_wind_gen = np.sum(wind_generation)
     total_curtailment_sum = total_charge_loss + total_discharge_loss + storage_capacity_arr[-1]
@@ -249,7 +249,7 @@ def calculate_single_case(
         "time_period_stats": time_period_stats
     }
 
-    # --- 新增：附加逐时数据 ---
+    # --- 附加逐时数据 ---
     if return_hourly:
         result["hourly_data"] = {
             "hour": np.arange(8760),
@@ -303,17 +303,17 @@ def perform_batch_calculation(pv_unit_data, wind_unit_data, load_data, params, m
                         "加权自用电价": res["weighted_self_price"],
                         "加权上网电价": res["weighted_on_grid_price"],
                         "综合电价": res["integrated_price"],
-                        "总发电量 (kWh)": res["total_generation_sum"], # <--- 新增这一行
+                        "总发电量 (kWh)": res["total_generation_sum"],
                         "总消纳量 (kWh)": res["total_consumption_sum"],
                         "总上网量 (kWh)": res["total_on_grid_sum"],
                         "总折损量 (kWh)": res["total_curtailment_sum"],
                         "自用比例 (%)": (res["total_consumption_sum"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "用电比例 (%)": (res["total_consumption_sum"] / total_load_sum * 100) if total_load_sum > 0 else 0.0,
-                        "尖消纳 (%)": (res["time_period_stats"]["尖"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
+                        "尖峰消纳 (%)": (res["time_period_stats"]["尖峰"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "峰消纳 (%)": (res["time_period_stats"]["峰"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "平消纳 (%)": (res["time_period_stats"]["平"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "谷消纳 (%)": (res["time_period_stats"]["谷"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
-                        "深消纳 (%)": (res["time_period_stats"]["深"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0, # 新增
+                        "深谷消纳 (%)": (res["time_period_stats"]["深谷"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0, 
                         "储能等效循环次数": res["storage_equivalent_cycles"]
                     })
 
@@ -335,7 +335,7 @@ def write_batch_results_to_excel(results: list[dict], params: dict) -> io.BytesI
         "加权自用电价", "加权上网电价", "综合电价",
         "总发电量 (kWh)", "消纳总电量 (kWh)", "上网总电量 (kWh)", "折损总电量 (kWh)",
         "自用比例 (%)", "用电比例 (%)",
-        "尖消纳 (%)", "峰消纳 (%)", "平消纳 (%)", "谷消纳 (%)", "深消纳 (%)", 
+        "尖峰消纳 (%)", "峰消纳 (%)", "平消纳 (%)", "谷消纳 (%)", "深谷消纳 (%)", 
         "储能等效循环次数"
     ]
     sheet.append(headers)
@@ -346,7 +346,7 @@ def write_batch_results_to_excel(results: list[dict], params: dict) -> io.BytesI
         cell.alignment = Alignment(horizontal="center")
         sheet.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 18
 
-    # 2. 填充数据，所有 column 顺移一位
+    # 2. 填充数据
     for row_idx, result in enumerate(results, 2):
         sheet.cell(row=row_idx, column=1, value=row_idx - 1)
         sheet.cell(row=row_idx, column=2, value=result['光伏容量 (MW)'])
@@ -365,11 +365,11 @@ def write_batch_results_to_excel(results: list[dict], params: dict) -> io.BytesI
         sheet.cell(row=row_idx, column=15, value=round(result['总折损量 (kWh)'], 6))
         sheet.cell(row=row_idx, column=16, value=round(result['自用比例 (%)'], 2))
         sheet.cell(row=row_idx, column=17, value=round(result['用电比例 (%)'], 2))
-        sheet.cell(row=row_idx, column=18, value=round(result['尖消纳 (%)'], 2))
+        sheet.cell(row=row_idx, column=18, value=round(result['尖峰消纳 (%)'], 2))
         sheet.cell(row=row_idx, column=19, value=round(result['峰消纳 (%)'], 2))
         sheet.cell(row=row_idx, column=20, value=round(result['平消纳 (%)'], 2))
         sheet.cell(row=row_idx, column=21, value=round(result['谷消纳 (%)'], 2))
-        sheet.cell(row=row_idx, column=22, value=round(result['深消纳 (%)'], 2)) 
+        sheet.cell(row=row_idx, column=22, value=round(result['深谷消纳 (%)'], 2)) 
         sheet.cell(row=row_idx, column=23, value=round(result['储能等效循环次数'], 2)) 
 
     excel_stream = io.BytesIO()
@@ -464,13 +464,13 @@ def write_hourly_data_to_excel(hourly_data: dict, scheme_info: dict) -> io.Bytes
 def init_session_state():
     if 'monthly_config_data' not in st.session_state:
         st.session_state.monthly_config_data = {
-            m: {'尖': '19-21', '峰': '12-14, 17-18, 22-23', '平': '7-11, 15-16', '谷': '0-5', '深': '6-6'} 
+            m: {'尖峰': '19-21', '峰': '12-14, 17-18, 22-23', '平': '7-11, 15-16', '谷': '0-5', '深谷': '6-6'} 
             for m in range(1, 13)
         }
     if 'batch_results' not in st.session_state:
         st.session_state.batch_results = []
     if 'discharge_allowed' not in st.session_state:
-        st.session_state.discharge_allowed = {'尖': True, '峰': True, '平': True, '谷': True, '深': True}
+        st.session_state.discharge_allowed = {'尖峰': True, '峰': True, '平': True, '谷': True, '深谷': True}
 
 def parse_time_slot_input(s):
     try:
@@ -506,7 +506,7 @@ def get_final_map():
     final_map = {}
     for month in range(1, 13):
         h_map = {h: '平' for h in range(24)}
-        for period in ['深', '谷', '平', '峰', '尖']: 
+        for period in ['深谷', '谷', '平', '峰', '尖峰']: 
             slots = parse_time_slot_input(st.session_state.monthly_config_data[month][period])
             if slots:
                 for s, e in slots:
@@ -517,11 +517,11 @@ def get_final_map():
 
 def color_time_periods(val):
     color_map = {
-        '尖': 'background-color: #ff6347; color: white', 
+        '尖峰': 'background-color: #ff6347; color: white', 
         '峰': 'background-color: #ffd700; color: black', 
         '平': 'background-color: #90ee90; color: black', 
         '谷': 'background-color: #add8e6; color: black', 
-        '深': 'background-color: #4682b4; color: white', 
+        '深谷': 'background-color: #4682b4; color: white', 
     }
     return color_map.get(val, '')
 
@@ -541,20 +541,59 @@ def main():
     
     with tab2:
         st.subheader("1. 时段电价与放电策略")
+        # 折损/弃电电价单独放一行
         prices = {'Curtailment': st.number_input("折损/弃电电价 (元/kWh)", value=0.0, format="%.4f")}
-        cols = st.columns(5)
-        for i, p in enumerate(['尖', '峰', '平', '谷', '深']):
-            with cols[i]:
-                st.markdown(f"**{p}时段**")
-                prices[p] = {
-                    'self': st.number_input(f"{p}自用电价", value=0.3 if p=='深' else (1.2 if i<2 else 0.6), format="%.4f", key=f"s_{p}"),
-                    'on_grid': st.number_input(f"{p}上网电价", value=0.38, format="%.4f", key=f"o_{p}")
-                }
-                st.session_state.discharge_allowed[p] = st.checkbox(f"{p}允许放电", value=True, key=f"d_{p}")
+        periods = ['尖峰', '峰', '平', '谷', '深谷']
+        # -------------------- 表头行 --------------------
+        header_cols = st.columns([0.8] + [1] * 5)  # 第一列窄一些作为行标签列
+        with header_cols[0]:
+            st.markdown("**时段 →**")
+        for i, p in enumerate(periods):
+            with header_cols[i + 1]:
+                st.markdown(f"**{p}**")
+        # -------------------- 第1行：自用电价 --------------------
+        row1_cols = st.columns([0.8] + [1] * 5)
+        with row1_cols[0]:
+            st.markdown("**自用电价**")
+        for i, p in enumerate(periods):
+            with row1_cols[i + 1]:
+                prices[p] = prices.get(p, {})
+                prices[p]['self'] = st.number_input(
+                    label="",  # 隐藏label，靠表头辨识
+                    value=0.3 if p == '深谷' else (1.2 if i < 2 else 0.6),
+                    format="%.4f",
+                    key=f"s_{p}",
+                    label_visibility="collapsed"
+                )
+        # -------------------- 第2行：上网电价 --------------------
+        row2_cols = st.columns([0.8] + [1] * 5)
+        with row2_cols[0]:
+            st.markdown("**上网电价**")
+        for i, p in enumerate(periods):
+            with row2_cols[i + 1]:
+                prices[p]['on_grid'] = st.number_input(
+                    label="",
+                    value=0.38,
+                    format="%.4f",
+                    key=f"o_{p}",
+                    label_visibility="collapsed"
+                )
+        # -------------------- 第3行：允许放电（复选框） --------------------
+        row3_cols = st.columns([0.8] + [1] * 5)
+        with row3_cols[0]:
+            st.markdown("**允许放电**")
+        for i, p in enumerate(periods):
+            with row3_cols[i + 1]:
+                st.session_state.discharge_allowed[p] = st.checkbox(
+                    label="",
+                    value=True,
+                    key=f"d_{p}",
+                    label_visibility="collapsed"
+                )
 
         st.markdown("---")
         st.subheader("2. 月度时段详细配置")
-        st.info("格式: 开始-结束 (0-23)，多个时段用逗号分隔。优先级：尖 > 峰 > 平 > 谷")
+        st.info("格式: 开始-结束 (0-23)，多个时段用逗号分隔。优先级：尖峰 > 峰 > 平 > 谷 > 深谷")
         
         edit_col1, _ = st.columns([1, 2])
         with edit_col1:
@@ -562,7 +601,7 @@ def main():
         
         m_cols = st.columns(5)
         temp_inputs = {}
-        for i, p in enumerate(['尖', '峰', '平', '谷', '深']):
+        for i, p in enumerate(['尖峰', '峰', '平', '谷', '深谷']):
             # 使用 temp_inputs 存储当前输入，避免直接修改 session_state 导致冲突
             temp_inputs[p] = m_cols[i].text_input(f"{p}时段定义", value=st.session_state.monthly_config_data[month][p], key=f"input_{month}_{p}")
             st.session_state.monthly_config_data[month][p] = temp_inputs[p]
@@ -590,7 +629,7 @@ def main():
                 preview_data.append(row)
             
             df_preview = pd.DataFrame(preview_data).set_index("小时")
-            st.markdown("##### 图例：<span style='background-color:#ff6347; color:white; padding:2px 6px; border-radius:3px;'>尖</span> <span style='background-color:#ffd700; color:black; padding:2px 6px; border-radius:3px;'>峰</span> <span style='background-color:#90ee90; color:black; padding:2px 6px; border-radius:3px;'>平</span> <span style='background-color:#add8e6; color:black; padding:2px 6px; border-radius:3px;'>谷</span> <span style='background-color:#4682b4; color:white; padding:2px 6px; border-radius:3px;'>深</span>", unsafe_allow_html=True)
+            st.markdown("##### 图例：<span style='background-color:#ff6347; color:white; padding:2px 6px; border-radius:3px;'>尖峰</span> <span style='background-color:#ffd700; color:black; padding:2px 6px; border-radius:3px;'>峰</span> <span style='background-color:#90ee90; color:black; padding:2px 6px; border-radius:3px;'>平</span> <span style='background-color:#add8e6; color:black; padding:2px 6px; border-radius:3px;'>谷</span> <span style='background-color:#4682b4; color:white; padding:2px 6px; border-radius:3px;'>深谷</span>", unsafe_allow_html=True)
             # 使用 .map() 代替已弃用的 .applymap()
             st.dataframe(df_preview.style.map(color_time_periods), width='stretch', height=800)
 
@@ -717,57 +756,57 @@ def main():
                 ex_data = write_batch_results_to_excel(st.session_state.batch_results, st.session_state.last_params)
                 
                 # --- 导出按钮行：完整报表 + 逐时过程量 ---
-                col_dl1, col_dl2 = st.columns([1, 1])
-                with col_dl1:
-                    st.download_button(
-                        label="下载 Excel 完整报表",
-                        data=ex_data,
-                        file_name=f"能源模拟分析_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        width='stretch'
-                    )
-                with col_dl2:
-                    # 方案选择下拉框
-                    scheme_options = [
-                        f"方案{idx}：光伏{res['光伏容量 (MW)']}MW_风电{res['风电容量 (MW)']}MW_储能{res['储能功率 (MW)']}MWx{res['储能时长 (h)']}h"
-                        for idx, res in enumerate(st.session_state.batch_results, 1)
-                    ]
-                    selected_scheme_idx = st.selectbox(
-                        "选择方案导出逐时数据",
-                        range(len(scheme_options)),
-                        format_func=lambda i: scheme_options[i],
-                        key="scheme_selector"
-                    )
-                    
-                    if st.button("计算该方案 8760 逐时过程量", width='stretch', key="export_hourly"):
-                        with st.spinner("正在重新计算逐时数据并生成 Excel..."):
-                            selected = st.session_state.batch_results[selected_scheme_idx]
-                            # 重新获取原始数据
-                            pv_unit = df["PV_Unit_Output(kWh)"].values
-                            wind_unit = df["Wind_Unit_Output(kWh)"].values
-                            load = df["Load(kWh)"].values
-                            month_arr = generate_8760_month_array()
-                            
-                            # 重新计算该方案，并返回逐时数据
-                            hourly_res = calculate_single_case(
-                                pv_unit, wind_unit, load,
-                                selected['光伏容量 (MW)'],
-                                selected['风电容量 (MW)'],
-                                selected['储能功率 (MW)'],
-                                selected['储能时长 (h)'],
-                                st.session_state.last_params['efficiency'],
-                                st.session_state.last_params['depth'],
-                                st.session_state.last_params['peak_valley_map'],
-                                st.session_state.last_params['prices'],
-                                month_arr,
-                                st.session_state.last_params['discharge_allowed'],
-                                return_hourly=True          # <--- 关键：返回逐时数据
-                            )
-                            
-                            hourly_excel = write_hourly_data_to_excel(
-                                hourly_res["hourly_data"], selected
-                            )
+                
+                
+                st.download_button(
+                    label="下载 Excel 完整报表",
+                    data=ex_data,
+                    file_name=f"能源模拟分析_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width='stretch'
+                )
+            
+                # 方案选择下拉框
+                scheme_options = [
+                    f"方案{idx}：光伏{res['光伏容量 (MW)']}MW_风电{res['风电容量 (MW)']}MW_储能{res['储能功率 (MW)']}MWx{res['储能时长 (h)']}h"
+                    for idx, res in enumerate(st.session_state.batch_results, 1)
+                ]
+                selected_scheme_idx = st.selectbox(
+                    "选择方案导出逐时数据",
+                    range(len(scheme_options)),
+                    format_func=lambda i: scheme_options[i],
+                    key="scheme_selector"
+                )
+                
+                if st.button("计算该方案 8760 逐时过程量", width='stretch', key="export_hourly"):
+                    with st.spinner("正在重新计算逐时数据并生成 Excel..."):
+                        selected = st.session_state.batch_results[selected_scheme_idx]
+                        # 重新获取原始数据
+                        pv_unit = df["PV_Unit_Output(kWh)"].values
+                        wind_unit = df["Wind_Unit_Output(kWh)"].values
+                        load = df["Load(kWh)"].values
+                        month_arr = generate_8760_month_array()
                         
+                        # 重新计算该方案，并返回逐时数据
+                        hourly_res = calculate_single_case(
+                            pv_unit, wind_unit, load,
+                            selected['光伏容量 (MW)'],
+                            selected['风电容量 (MW)'],
+                            selected['储能功率 (MW)'],
+                            selected['储能时长 (h)'],
+                            st.session_state.last_params['efficiency'],
+                            st.session_state.last_params['depth'],
+                            st.session_state.last_params['peak_valley_map'],
+                            st.session_state.last_params['prices'],
+                            month_arr,
+                            st.session_state.last_params['discharge_allowed'],
+                            return_hourly=True          # <--- 关键：返回逐时数据
+                        )
+                        
+                        hourly_excel = write_hourly_data_to_excel(
+                            hourly_res["hourly_data"], selected
+                        )
+                    
                         st.download_button(
                             label="点击下载逐时过程量 Excel",
                             data=hourly_excel,
@@ -776,6 +815,22 @@ def main():
                             width='stretch',
                             key="download_hourly"
                         )
+                        # ========== 新增：逐日发电量与逐日负荷折线图 ==========
+                        st.markdown("---")
+                        st.subheader("逐日发电量与逐日负荷曲线")
+                        # 从逐时数据中提取
+                        hourly_gen = hourly_res["hourly_data"]["total_generation_kwh"]   # shape (8760,)
+                        hourly_load = hourly_res["hourly_data"]["load_kwh"]               # shape (8760,)
+                        # 8760小时 → 按24小时/天 聚合为365天
+                        daily_gen = np.sum(hourly_gen.reshape(-1, 24), axis=1)   # 每天发电量总和
+                        daily_load = np.sum(hourly_load.reshape(-1, 24), axis=1)  # 每天负荷总和
+                        days = np.arange(1, 366)  # 1~365
+                        chart_df = pd.DataFrame({
+                            "天数": days,
+                            "逐日发电量 (kWh)": daily_gen,
+                            "逐日负荷 (kWh)": daily_load
+                        }).set_index("天数")
+                        st.line_chart(chart_df)
 
 
 if __name__ == "__main__":
