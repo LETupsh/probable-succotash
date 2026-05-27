@@ -670,7 +670,7 @@ def main():
             st.line_chart(chart_data["日均上网电价 (元/kWh)"], color="#1f77b4") # 蓝色            
 
     with tab1:
-        st.title("能源系统批量模拟分析")
+        st.title("新能源项目源荷储匹配分析平台")
         f = st.file_uploader("上传 8760 逐时数据 (CSV)", type="csv")
         if f:
             df = pd.read_csv(f)
@@ -835,7 +835,7 @@ def main():
 
 if __name__ == "__main__":
 # 配置必须放在最前面
-    st.set_page_config(layout="wide", page_title="能源源荷匹配与经济性分析")
+    st.set_page_config(layout="wide", page_title="新能源项目源荷储匹配分析平台")
     
     # 先验证登录
     if check_login():
