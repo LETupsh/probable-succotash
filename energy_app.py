@@ -27,7 +27,7 @@ if not cookies.ready():
 def check_login():
     if cookies.get("auth_status") == "logged_in":
         return True
-    st.title("能源系统分析 - 身份验证")
+    st.title("新能源项目源荷储匹配分析平台 - 身份验证")
     with st.form("login_form"):
         user_input = st.text_input("账号")
         pw_input = st.text_input("密码", type="password")
@@ -294,9 +294,9 @@ def perform_batch_calculation(pv_unit_data, wind_unit_data, load_data, params, m
                         "加权上网电价": res["weighted_on_grid_price"],
                         "综合电价": res["integrated_price"],
                         "总发电量 (kWh)": res["total_generation_sum"],
-                        "总消纳量 (kWh)": res["total_consumption_sum"],
-                        "总上网量 (kWh)": res["total_on_grid_sum"],
-                        "总折损量 (kWh)": res["total_curtailment_sum"],
+                        "总消纳电量 (kWh)": res["total_consumption_sum"],
+                        "总上网电量 (kWh)": res["total_on_grid_sum"],
+                        "总折损电量 (kWh)": res["total_curtailment_sum"],
                         "自用比例 (%)": (res["total_consumption_sum"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "绿电占用电比例 (%)": (res["total_consumption_sum"] / total_load_sum * 100) if total_load_sum > 0 else 0.0,
                         "尖峰消纳 (%)": (res["time_period_stats"]["尖峰"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
@@ -340,9 +340,9 @@ def write_batch_results_to_excel(results, params):
         sheet.cell(row=row_idx, column=10, value=round(result['加权上网电价'], 4))
         sheet.cell(row=row_idx, column=11, value=round(result['综合电价'], 4))
         sheet.cell(row=row_idx, column=12, value=round(result['总发电量 (kWh)'], 6))
-        sheet.cell(row=row_idx, column=13, value=round(result['总消纳量 (kWh)'], 6))
-        sheet.cell(row=row_idx, column=14, value=round(result['总上网量 (kWh)'], 6))
-        sheet.cell(row=row_idx, column=15, value=round(result['总折损量 (kWh)'], 6))
+        sheet.cell(row=row_idx, column=13, value=round(result['总消纳电量 (kWh)'], 6))
+        sheet.cell(row=row_idx, column=14, value=round(result['总上网电量 (kWh)'], 6))
+        sheet.cell(row=row_idx, column=15, value=round(result['总折损电量 (kWh)'], 6))
         sheet.cell(row=row_idx, column=16, value=round(result['自用比例 (%)'], 2))
         sheet.cell(row=row_idx, column=17, value=round(result['绿电占用电比例 (%)'], 2))
         sheet.cell(row=row_idx, column=18, value=round(result['储能等效循环次数'], 2))
@@ -357,8 +357,8 @@ def write_hourly_data_to_excel(hourly_data, scheme_info):
     sheet.title = "8760逐时过程量"
     summary_headers = [
         "光伏容量 (MW)", "风电容量 (MW)", "储能功率 (MW)", "储能时长 (h)",
-        "储能容量 (MWh)", "综合电价", "总发电量 (kWh)", "总消纳量 (kWh)",
-        "总上网量 (kWh)", "总折损量 (kWh)", "自用比例 (%)", "绿电占用电比例 (%)"
+        "储能容量 (MWh)", "综合电价", "总发电量 (kWh)", "总消纳电量 (kWh)",
+        "总上网电量 (kWh)", "总折损电量 (kWh)", "自用比例 (%)", "绿电占用电比例 (%)"
     ]
     for col_idx, header in enumerate(summary_headers, 1):
         cell = sheet.cell(row=1, column=col_idx, value=header)
@@ -368,8 +368,8 @@ def write_hourly_data_to_excel(hourly_data, scheme_info):
         scheme_info.get('光伏容量 (MW)', ''), scheme_info.get('风电容量 (MW)', ''),
         scheme_info.get('储能功率 (MW)', ''), scheme_info.get('储能时长 (h)', ''),
         scheme_info.get('储能容量 (MWh)', ''), round(scheme_info.get('综合电价', 0), 4),
-        round(scheme_info.get('总发电量 (kWh)', 0), 2), round(scheme_info.get('总消纳量 (kWh)', 0), 2),
-        round(scheme_info.get('总上网量 (kWh)', 0), 2), round(scheme_info.get('总折损量 (kWh)', 0), 2),
+        round(scheme_info.get('总发电量 (kWh)', 0), 2), round(scheme_info.get('总消纳电量 (kWh)', 0), 2),
+        round(scheme_info.get('总上网电量 (kWh)', 0), 2), round(scheme_info.get('总折损电量 (kWh)', 0), 2),
         round(scheme_info.get('自用比例 (%)', 0), 2), round(scheme_info.get('绿电占用电比例 (%)', 0), 2),
     ]
     for col_idx, val in enumerate(summary_values, 1):
@@ -752,8 +752,8 @@ def main():
                     "储能功率 (MW)": "{:.2f}", "储能时长 (h)": "{:.1f}",
                     "储能容量 (MWh)": "{:.2f}",
                     "加权自用电价": "{:.4f}", "加权上网电价": "{:.4f}", "综合电价": "{:.4f}",
-                    "总发电量 (kWh)": "{:.2f}", "总消纳量 (kWh)": "{:.2f}",
-                    "总上网量 (kWh)": "{:.2f}", "总折损量 (kWh)": "{:.2f}",
+                    "总发电量 (kWh)": "{:.2f}", "总消纳电量 (kWh)": "{:.2f}",
+                    "总上网电量 (kWh)": "{:.2f}", "总折损电量 (kWh)": "{:.2f}",
                     "自用比例 (%)": "{:.2f}", "绿电占用电比例 (%)": "{:.2f}",
                     "光伏利用小时数 (h)": "{:.1f}", "风电利用小时数 (h)": "{:.1f}",
                     "储能等效循环次数": "{:.2f}"
