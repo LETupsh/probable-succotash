@@ -8,7 +8,7 @@ from openpyxl.styles import Font, Alignment
 import datetime
 from streamlit_cookies_manager import EncryptedCookieManager
 import os
-import altair as alt                          # ★ 新增
+import altair as alt
 
 # ===================== 用户数据库 =====================
 USER_CREDENTIALS = {
@@ -285,7 +285,7 @@ def perform_batch_calculation(pv_unit_data, wind_unit_data, load_data, params, m
                         "总上网量 (kWh)": res["total_on_grid_sum"],
                         "总折损量 (kWh)": res["total_curtailment_sum"],
                         "自用比例 (%)": (res["total_consumption_sum"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
-                        "用电比例 (%)": (res["total_consumption_sum"] / total_load_sum * 100) if total_load_sum > 0 else 0.0,
+                        "绿电占负荷比例 (%)": (res["total_consumption_sum"] / total_load_sum * 100) if total_load_sum > 0 else 0.0,
                         "尖峰消纳 (%)": (res["time_period_stats"]["尖峰"]["consumption"] / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "峰消纳 (%)":   (res["time_period_stats"]["峰"]["consumption"]   / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
                         "平消纳 (%)":   (res["time_period_stats"]["平"]["consumption"]   / res["total_generation_sum"] * 100) if res["total_generation_sum"] > 0 else 0.0,
@@ -305,8 +305,7 @@ def write_batch_results_to_excel(results, params):
         "储能功率 (MW)", "储能时长 (h)", "储能容量 (MWh)",
         "加权自用电价", "加权上网电价", "综合电价",
         "总发电量 (kWh)", "消纳总电量 (kWh)", "上网总电量 (kWh)", "折损总电量 (kWh)",
-        "自用比例 (%)", "用电比例 (%)",
-        "尖峰消纳 (%)", "峰消纳 (%)", "平消纳 (%)", "谷消纳 (%)", "深谷消纳 (%)",
+        "自用比例 (%)", "绿电占负荷比例 (%)",
         "储能等效循环次数"
     ]
     sheet.append(headers)
@@ -332,13 +331,8 @@ def write_batch_results_to_excel(results, params):
         sheet.cell(row=row_idx, column=14, value=round(result['总上网量 (kWh)'], 6))
         sheet.cell(row=row_idx, column=15, value=round(result['总折损量 (kWh)'], 6))
         sheet.cell(row=row_idx, column=16, value=round(result['自用比例 (%)'], 2))
-        sheet.cell(row=row_idx, column=17, value=round(result['用电比例 (%)'], 2))
-        sheet.cell(row=row_idx, column=18, value=round(result['尖峰消纳 (%)'], 2))
-        sheet.cell(row=row_idx, column=19, value=round(result['峰消纳 (%)'], 2))
-        sheet.cell(row=row_idx, column=20, value=round(result['平消纳 (%)'], 2))
-        sheet.cell(row=row_idx, column=21, value=round(result['谷消纳 (%)'], 2))
-        sheet.cell(row=row_idx, column=22, value=round(result['深谷消纳 (%)'], 2))
-        sheet.cell(row=row_idx, column=23, value=round(result['储能等效循环次数'], 2))
+        sheet.cell(row=row_idx, column=17, value=round(result['绿电占负荷比例 (%)'], 2))
+        sheet.cell(row=row_idx, column=18, value=round(result['储能等效循环次数'], 2))
     excel_stream = io.BytesIO()
     workbook.save(excel_stream)
     excel_stream.seek(0)
@@ -351,7 +345,7 @@ def write_hourly_data_to_excel(hourly_data, scheme_info):
     summary_headers = [
         "光伏容量 (MW)", "风电容量 (MW)", "储能功率 (MW)", "储能时长 (h)",
         "储能容量 (MWh)", "综合电价", "总发电量 (kWh)", "总消纳量 (kWh)",
-        "总上网量 (kWh)", "总折损量 (kWh)", "自用比例 (%)", "用电比例 (%)"
+        "总上网量 (kWh)", "总折损量 (kWh)", "自用比例 (%)", "绿电占负荷比例 (%)"
     ]
     for col_idx, header in enumerate(summary_headers, 1):
         cell = sheet.cell(row=1, column=col_idx, value=header)
@@ -363,7 +357,7 @@ def write_hourly_data_to_excel(hourly_data, scheme_info):
         scheme_info.get('储能容量 (MWh)', ''), round(scheme_info.get('综合电价', 0), 4),
         round(scheme_info.get('总发电量 (kWh)', 0), 2), round(scheme_info.get('总消纳量 (kWh)', 0), 2),
         round(scheme_info.get('总上网量 (kWh)', 0), 2), round(scheme_info.get('总折损量 (kWh)', 0), 2),
-        round(scheme_info.get('自用比例 (%)', 0), 2), round(scheme_info.get('用电比例 (%)', 0), 2),
+        round(scheme_info.get('自用比例 (%)', 0), 2), round(scheme_info.get('绿电占负荷比例 (%)', 0), 2),
     ]
     for col_idx, val in enumerate(summary_values, 1):
         cell = sheet.cell(row=2, column=col_idx, value=val)
@@ -736,6 +730,8 @@ def main():
 
             if st.session_state.batch_results:
                 res_df = pd.DataFrame(st.session_state.batch_results)
+                cols_drop = ["尖峰消纳 (%)", "峰消纳 (%)", "平消纳 (%)", "谷消纳 (%)", "深谷消纳 (%)"]
+                res_df = res_df.drop(columns=[c for c in cols_drop if c in res_df.columns])
                 n_rows = len(res_df)
                 table_height = (n_rows + 1) * 35 + 3
                 st.dataframe(res_df.style.format({
@@ -745,11 +741,9 @@ def main():
                     "加权自用电价": "{:.4f}", "加权上网电价": "{:.4f}", "综合电价": "{:.4f}",
                     "总发电量 (kWh)": "{:.2f}", "总消纳量 (kWh)": "{:.2f}",
                     "总上网量 (kWh)": "{:.2f}", "总折损量 (kWh)": "{:.2f}",
-                    "自用比例 (%)": "{:.2f}", "用电比例 (%)": "{:.2f}",
+                    "自用比例 (%)": "{:.2f}", "绿电占负荷比例 (%)": "{:.2f}",
                     "光伏利用小时数 (h)": "{:.1f}", "风电利用小时数 (h)": "{:.1f}",
-                    "尖消纳 (%)": "{:.2f}", "峰消纳 (%)": "{:.2f}",
-                    "平消纳 (%)": "{:.2f}", "谷消纳 (%)": "{:.2f}",
-                    "深消纳 (%)": "{:.2f}", "储能等效循环次数": "{:.2f}"
+                    "储能等效循环次数": "{:.2f}"
                 }), height=table_height, use_container_width=True)
 
                 ex_data = write_batch_results_to_excel(st.session_state.batch_results, st.session_state.last_params)
@@ -819,19 +813,22 @@ def main():
                         })
                         df_daily_long = df_daily.melt(id_vars=["天数"], var_name="指标", value_name="kWh")
                         alt_daily = alt.Chart(df_daily_long).mark_line().encode(
-                            x=alt.X("天数", title="天数"),
+                            x=alt.X("天数", title="天数", scale=alt.Scale(domain=[0, 370])),
                             y=alt.Y("kWh", title="kWh"),
                             color=alt.Color("指标", scale=alt.Scale(
                                 domain=["逐日发电量 (kWh)", "逐日负荷 (kWh)"],
                                 range=["#ff6347", "#1f77b4"]
-                            ))
+                            ), legend=alt.Legend(orient="top"))
                         ).properties(height=350)
                         st.altair_chart(alt_daily, use_container_width=True)
 
                         # ===== 每日自用比例 + 新能源占负荷比例（Altair 静态图） =====
                         daily_cons = np.sum(hourly_cons.reshape(-1, 24), axis=1)
-                        daily_self_ratio = np.divide(daily_cons, daily_gen,
-                            where=daily_gen > 0, out=np.zeros_like(daily_gen)) * 100
+                        daily_self_ratio = np.clip(
+                            np.divide(daily_cons, daily_gen,
+                                where=daily_gen > 0, out=np.zeros_like(daily_gen)) * 100,
+                            0, 100
+                        )
                         daily_renewable_ratio = np.divide(daily_cons, daily_load,
                             where=daily_load > 0, out=np.zeros_like(daily_load)) * 100
 
@@ -840,7 +837,7 @@ def main():
                             st.markdown("**每日自用比例（消纳/发电）**")
                             df_self = pd.DataFrame({"天数": days, "每日自用比例 (%)": daily_self_ratio})
                             alt_self2 = alt.Chart(df_self).mark_line(color="#ff6347").encode(
-                                x="天数", y="每日自用比例 (%)"
+                                x=alt.X("天数", scale=alt.Scale(domain=[0, 370])), y="每日自用比例 (%)"
                             ).properties(height=300)
                             st.altair_chart(alt_self2, use_container_width=True)
 
@@ -848,7 +845,7 @@ def main():
                             st.markdown("**每日新能源占负荷用电比例（消纳/负荷）**")
                             df_renew = pd.DataFrame({"天数": days, "每日新能源占负荷用电比例 (%)": daily_renewable_ratio})
                             alt_renew = alt.Chart(df_renew).mark_line(color="#1f77b4").encode(
-                                x="天数", y="每日新能源占负荷用电比例 (%)"
+                                x=alt.X("天数", scale=alt.Scale(domain=[0, 370])), y="每日新能源占负荷用电比例 (%)"
                             ).properties(height=300)
                             st.altair_chart(alt_renew, use_container_width=True)
 
