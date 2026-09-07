@@ -1,14 +1,20 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import math
-import io
-import openpyxl
-from openpyxl.styles import Font, Alignment
+
+# ===================== 0.1 兼容性补丁 (修复 Python 3.14/Streamlit 报错) =====================
+# 解决 streamlit-cookies-manager 内部调用已弃用/移除的 st.cache 问题
+if not hasattr(st, "cache"):
+    st.cache = st.cache_data
+
 import datetime
-from streamlit_cookies_manager import EncryptedCookieManager
+import io
+import math
 import os
 import altair as alt
+import numpy as np
+import openpyxl
+from openpyxl.styles import Alignment, Font
+import pandas as pd
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # ===================== 用户数据库 =====================
 USER_CREDENTIALS = {
@@ -52,7 +58,7 @@ def logout():
         cookies["current_user"] = ""
         cookies.save()
         st.rerun()
-    # ===== 新增：8760 数据模板下载 =====
+    # ===== 数据模板下载 =====
     st.sidebar.markdown("---")
     st.sidebar.markdown("**数据模板下载**")
     template_csv = "PV_Unit_Output(kWh),Wind_Unit_Output(kWh),Load(kWh)\n"
