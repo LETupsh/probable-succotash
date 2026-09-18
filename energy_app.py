@@ -25,6 +25,7 @@ USER_CREDENTIALS = {
 
 # ===================== 0. 登录与 Cookie =====================
 cookies = EncryptedCookieManager(
+    prefix="energy-app/",
     password=os.environ.get("COOKIES_PASSWORD", "a_very_secret_password_12345")
 )
 if not cookies.ready():
